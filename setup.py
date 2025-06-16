@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="constants_and_tools",
-    version="0.1.0",
+    version="1.1.0",
     author="Aletheia_corp",
     author_email="dsarabiatorres@gmail.com",
     description="Librería para desarrollo rápido y debug",
@@ -17,10 +17,10 @@ setup(
     ],
     install_requires=[
         "colorama==0.4.6",
-        "numpy==2.2.3",
         "openpyxl==3.1.5",
         "pandas==2.2.3",
         "pyarrow==19.0.1",
+        "polars==1.30.0",
         "tabulate==0.9.0"
     ],
     python_requires=">=3.10",

@@ -1,41 +1,40 @@
 import os
 import tempfile
-import pandas as pd
+import polars as pl
 import json
-from singleton_tools.singleton_meta_class import SingletonMeta
+from singleton_tools import SingletonMeta
 
 
-class PandasTools(metaclass=SingletonMeta):
+class PolarsTools(metaclass=SingletonMeta):
     def __init__(self):
         pass
 
     # <editor-fold desc="Archivos temporales    ----------------------------------------------------------------------------------------------------------------------------------">
     @staticmethod
-    def save_temporary_df(df: pd.DataFrame) -> tempfile.NamedTemporaryFile:
+    def save_temporary_df(df: pl.DataFrame) -> tempfile.NamedTemporaryFile:
         """
         Guarda un DataFrame en un archivo temporal y devuelve la ruta del archivo.
-        :param df:DataFrame de pandas a guardar.
-        :return:Un objeto de archivo temporal que necesita ser cerrado después de su uso.
+        :param df: DataFrame de polars a guardar.
+        :return: Un objeto de archivo temporal que necesita ser cerrado después de su uso.
         """
         # Crear un archivo temporal para el DataFrame
-        temp_file = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.pkl')
+        temp_file = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.parquet')
 
         # Guardar el DataFrame en el archivo temporal
-        df.to_pickle(temp_file.name)
+        df.write_parquet(temp_file.name)
 
         # Devolver el objeto de archivo temporal para su posterior uso
         return temp_file
 
     @staticmethod
-    def load_temporary_df(temp_file_object) -> pd.DataFrame:
+    def load_temporary_df(temp_file_object) -> pl.DataFrame:
         """
         Lee un DataFrame desde un archivo temporal dado.
         :param temp_file_object: Objeto de archivo temporal desde el cual leer el DataFrame.
-        :return: DataFrame de pandas leído desde el archivo.
+        :return: DataFrame de polars leído desde el archivo.
         """
-
         # Leer el DataFrame desde el archivo temporal
-        df = pd.read_pickle(temp_file_object.name)
+        df = pl.read_parquet(temp_file_object.name)
 
         # Cerrar y eliminar el archivo temporal
         temp_file_object.close()
@@ -61,7 +60,7 @@ class PandasTools(metaclass=SingletonMeta):
     # <editor-fold desc="Utilidades varias    ------------------------------------------------------------------------------------------------------------------------------------">
 
     @staticmethod
-    def boolean_imputer(df: pd.DataFrame, colname: str, value_to_fill):
+    def boolean_imputer(df: pl.DataFrame, colname: str, value_to_fill):
         """
         Este método se usa para imputar columnas boleanas transformandolas a entero y agregando un nuevo valor para los NA
         :param df:
@@ -69,8 +68,8 @@ class PandasTools(metaclass=SingletonMeta):
         :param value_to_fill:
         :return:
         """
-        df[colname] = pd.to_numeric(df[colname], errors='coerce').astype('Int64')
-        df[colname] = df[colname].fillna(value_to_fill)
+        df = df.with_columns(pl.col(colname).cast(pl.Int64, strict=False).fill_null(value_to_fill))
+        return df
 
     @staticmethod
     def stringColsToList(str_text: str):
@@ -81,157 +80,161 @@ class PandasTools(metaclass=SingletonMeta):
 
     # <editor-fold desc="Transformación y tipado    ------------------------------------------------------------------------------------------------------------------------------">
 
-    def tipping_by_dict(self, df: pd.DataFrame, colname_type_dict: dict, date_format: str) -> pd.DataFrame:
+    @staticmethod
+    def tipping_by_dict(df: pl.DataFrame, colname_type_dict: dict, date_format: str) -> pl.DataFrame:
         """
-        Tipar las columnas que se encuentran en un dict. Options: [Int64, float64, datetime, object, category]
+        Tipar las columnas que se encuentran en un dict.
+        Options: [Int64, Float64, Datetime, Utf8, Categorical]
         :param date_format:
         :param df:
         :param colname_type_dict:
         :return:
         """
-        df_cols_list: list = [z for z in df.columns]
+        df_cols_list: list = df.columns
         for colname, coltype in colname_type_dict.items():
             if colname in df_cols_list:
                 match coltype:
                     case "Int64":
-                        df[colname] = self.to_pandas_int64(df[colname])
-                    case "float64":
-                        df[colname] = self.to_pandas_float64(df[colname])
-                    case "datetime":
-                        df[colname] = self.to_pandas_datetime(df[colname], date_format)
-                    case "object":
-                        df[colname] = self.to_pandas_object(df[colname])
-                    case "category":
-                        df[colname] = self.to_pandas_categorical(df[colname])
+                        df = df.with_columns(pl.col(colname).cast(pl.Int64, strict=False))
+                    case "Float64":
+                        df = df.with_columns(pl.col(colname).cast(pl.Float64, strict=False))
+                    case "Datetime":
+                        df = df.with_columns(pl.col(colname).str.strptime(pl.Datetime, format=date_format, strict=False))
+                    case "Utf8":
+                        df = df.with_columns(pl.col(colname).cast(pl.Utf8, strict=False))
+                    case "Categorical":
+                        df = df.with_columns(pl.col(colname).cast(pl.Categorical, strict=False))
                     case _:
                         pass
         return df
 
     @staticmethod
-    def to_pandas_int64(df_column: pd.Series):
-        return pd.to_numeric(df_column, errors='coerce').astype('Int64')
+    def to_polars_int64(df_column: pl.Series):
+        return df_column.cast(pl.Int64, strict=False)
 
     @staticmethod
-    def to_pandas_bool(df_column: pd.Series, firstInt64: bool = True):
+    def to_polars_bool(df_column: pl.Series, firstInt64: bool = True):
         if firstInt64:
-            return pd.to_numeric(df_column, errors='coerce').astype('Int64').astype(pd.BooleanDtype())
+            return df_column.cast(pl.Int64, strict=False).cast(pl.Boolean, strict=False)
         else:
-            return df_column.astype(pd.BooleanDtype())
+            return df_column.cast(pl.Boolean, strict=False)
 
     @staticmethod
-    def to_pandas_float64(df_column: pd.Series):
-        return pd.to_numeric(df_column, errors='coerce').astype('float64')
+    def to_polars_float64(df_column: pl.Series):
+        return df_column.cast(pl.Float64, strict=False)
 
     @staticmethod
-    def to_pandas_datetime(df_column: pd.Series | str, formatter: str = "%Y-%m-%d"):
+    def to_polars_datetime(df_column: pl.Series | str, formatter: str = "%Y-%m-%d"):
         try:
-            return pd.to_datetime(df_column, format=f"{formatter}", errors="coerce")
-        except TypeError:
-            r = pd.to_datetime(df_column, format=formatter.replace(" %H:%M:%S", ""), errors="coerce")
-            if r.isnull().sum() == r.size:
-                raise TypeError("El formatter indicado ha arrojado un ValueError, se ha reintentado con %Y-%m-%d y ha hecho nula la columna")
+            if isinstance(df_column, str):
+                return pl.Series([df_column]).str.strptime(pl.Datetime, format=formatter, strict=False)[0]
+            return df_column.str.strptime(pl.Datetime, format=formatter, strict=False)
+        except Exception as e:
+            r = df_column.str.strptime(pl.Datetime, format=formatter.replace(" %H:%M:%S", ""), strict=False)
+            if r.null_count() == r.len():
+                raise TypeError(f"El formatter indicado ha arrojado un ValueError {e}, se ha reintentado con %Y-%m-%d y ha hecho nula la columna")
             return r
 
     @staticmethod
-    def to_pandas_timedelta(df_column: pd.Series | str):
-        return pd.to_timedelta(df_column, errors="coerce")
+    def to_polars_timedelta(df_column: pl.Series | str):
+        if isinstance(df_column, str):
+            return pl.Series([df_column]).cast(pl.Duration, strict=False)[0]
+        return df_column.cast(pl.Duration, strict=False)
 
     @staticmethod
-    def to_pandas_object(df_column: pd.Series):
-        return df_column.astype("object", copy=False)
+    def to_polars_object(df_column: pl.Series):
+        return df_column.cast(pl.Object, strict=False)
 
     @staticmethod
-    def to_pandas_string(df_column: pd.Series):
-        return df_column.astype(pd.StringDtype())
+    def to_polars_string(df_column: pl.Series):
+        return df_column.cast(pl.Utf8, strict=False)
 
     @staticmethod
-    def to_pandas_categorical(df_column: pd.Series):
-        return pd.Categorical(df_column)
-
-    @staticmethod
-    def to_pandas_categorical_ordered(df_column: pd.Series, ordered_values_list: list):
-        return pd.Categorical(df_column, categories=ordered_values_list, ordered=True)
+    def to_polars_categorical(df_column: pl.Series):
+        return df_column.cast(pl.Categorical, strict=False)
 
     # </editor-fold>
 
     # <editor-fold desc="Carga y guardado de dataframes    -----------------------------------------------------------------------------------------------------------------------">
 
     @staticmethod
-    def read_csv_infering(file_path: str, sep: str | None = None, usecols: list | None = None) -> pd.DataFrame:
+    def read_csv_infering(file_path: str, sep: str = ",", usecols: list | None = None) -> pl.DataFrame:
         """
         Metodo para leer archivos csv
         :param file_path: Ruta del archivo y extension (csv)
         :param sep: Default = "," -> Separador del csv
         :param usecols: En caso de querer solo algunas columnas, las especificamos en una lista
-        :return: pd.DataFrame
+        :return: pl.DataFrame
         """
-        return pd.read_csv(file_path, sep=sep, header=0, usecols=usecols, engine="python")
+
+        return pl.read_csv(file_path, separator=sep, columns=usecols)
 
     @staticmethod
-    def read_excel_infering(file_path: str, sheet_name: str | int = 0, usecols: list | None = None) -> pd.DataFrame:
+    def read_excel_infering(file_path: str, sheet_name: str | int = 0, usecols: list | None = None) -> pl.DataFrame:
         """
         Método para leer archivos Excel.
         :param file_path: Ruta del archivo y extensión (xlsx, xls).
         :param sheet_name: Nombre o índice de la hoja de cálculo que se desea leer. Por defecto es la primera hoja.
         :param usecols: En caso de querer solo algunas columnas, las especificamos en una lista.
-        :return: pd.DataFrame
+        :return: pl.DataFrame
         """
-        return pd.read_excel(file_path, sheet_name=sheet_name, usecols=usecols)
+        return pl.read_excel(file_path, sheet_name=sheet_name, columns=usecols)
 
     @staticmethod
-    def df_to_csv(path: str, df: pd.DataFrame, index: bool = False):
+    def df_to_csv(path: str, df: pl.DataFrame, header: bool = False):
         """
-        Metodo para guardar dataframes de pandas en archivos csv
+        Metodo para guardar dataframes de polars en archivos csv
         :param path: ruta/archivo.csv
-        :param df: pd.Dataframe
-        :param index: Añadir columna de indices, por defecto false
+        :param df: pl.Dataframe
+        :param header: Añadir columna de header, por defecto false
         :return: True si ha creado el archivo, False si ya existe
         """
         if not os.path.exists(path):
             print(f"---> dfToCsv: Guardando {path} ...")
-            df.to_csv(path, index=index)
+            df.write_csv(path, include_header=header)
             print(f"---> dfToCsv: {path} guardado con exito. Su shape es: {df.shape}")
         else:
             print(f"---> dfToCsv: El archivo {path} ya existe")
 
     @staticmethod
-    def df_to_parquet(path: str, df: pd.DataFrame, index: bool = True):
+    def df_to_parquet(path: str, df: pl.DataFrame, index: bool = True):
         """
-        Metodo para guardar dataframes de pandas en archivos parquet (requiere pyarrow)
+        Metodo para guardar dataframes de polars en archivos parquet
         :param path: ruta/archivo.parquet
-        :param df: pd.Dataframe
+        :param df: pl.Dataframe
         :param index: Añadir columna de indices, por defecto false
         :return: True si ha creado el archivo, False si ya existe
         """
         if not os.path.exists(path):
             print(f"---> dfToParquet: Guardando {path} ...")
-            df.to_parquet(path, index=index)
+            if not index:
+                df.with_row_index(name=None)
+            df.write_parquet(path)
             print(f"---> dfToParquet: {path} guardado con exito. Su shape es: {df.shape}")
         else:
             print(f"---> dfToParquet: El archivo {path} ya existe")
 
     @staticmethod
-    def read_parquet_infering(file_path: str) -> pd.DataFrame:
+    def read_parquet_infering(file_path: str) -> pl.DataFrame:
         """
-        Metodo para leer archivos Parquet (requiere pyarrow)
+        Metodo para leer archivos Parquet
         :param file_path: Ruta del archivo y extension (Parquet)
-        :return: pd.DataFrame
+        :return: pl.DataFrame
         """
-        return pd.read_parquet(file_path)
+        return pl.read_parquet(file_path, use_pyarrow=True)
 
     @staticmethod
-    def df_to_json(path: str, df: pd.DataFrame, index: bool = False, dtype_dict: dict | None = None):
+    def df_to_json(path: str, df: pl.DataFrame, index: bool = False):
         """
-        Metodo para guardar dataframes de pandas en archivos json
-        :param dtype_dict: Diccionario de tipos de columna del json
+        Metodo para guardar dataframes de polars en archivos json
         :param path: ruta/archivo.json
-        :param df: pd.Dataframe
+        :param df: pl.Dataframe
         :param index: Añadir columna de indices, por defecto false
         :return: None
         """
-        if dtype_dict is not None:
-            df.to_json(path, index=index, orient='records', lines=False, dtype=dtype_dict)
-        else:
-            df.to_json(path)
+
+        if not index:
+            df.with_row_index(name=None)
+        df.write_json(path)
 
     # </editor-fold>
