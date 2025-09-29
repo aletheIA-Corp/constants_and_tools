@@ -18,9 +18,9 @@ setup(
     install_requires=[
         "colorama==0.4.6",
         "openpyxl==3.1.5",
-        "pandas==2.2.3",
-        "pyarrow==19.0.1",
-        "polars==1.30.0",
+        "pandas==2.3.2",
+        "pyarrow==21.0.0",
+        "polars==1.33.1",
         "tabulate==0.9.0"
     ],
     python_requires=">=3.10",

@@ -60,7 +60,7 @@ class InfoTools(metaclass=SingletonMeta):
     @staticmethod
     def print_polars_native(df: pl.DataFrame, row_print: int = 10):
         """
-        Método alternativo para imprimir usando el formato nativo de Polars
+        Metodo alternativo para imprimir usando el formato nativo de Polars
         :param df: DataFrame de Polars a imprimir
         :param row_print: Numero de filas a imprimir
         :return: None

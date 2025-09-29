@@ -48,12 +48,12 @@ class PandasTools(metaclass=SingletonMeta):
 
     @staticmethod
     def save_json_from_dict(path_and_file_with_extension: str, to_save_dict_object: dict):
-        with open(path_and_file_with_extension, 'w') as archivo_json:
-            json.dump(to_save_dict_object, archivo_json)
+        with open(path_and_file_with_extension, 'w', encoding='utf-8') as archivo_json:
+            json.dump(to_save_dict_object, archivo_json, ensure_ascii=False, indent=4)
 
     @staticmethod
     def load_json_in_dict(path_and_file_with_extension: str) -> dict:
-        with open(path_and_file_with_extension, 'r') as f:
+        with open(path_and_file_with_extension, 'r', encoding='utf-8') as f:
             return json.load(f)
 
     # </editor-fold>
@@ -195,20 +195,31 @@ class PandasTools(metaclass=SingletonMeta):
             print(f"---> dfToCsv: El archivo {path} ya existe")
 
     @staticmethod
-    def df_to_parquet(path: str, df: pd.DataFrame, index: bool = True):
+    def df_to_parquet(path: str, df: pd.DataFrame, index: bool = False, replace_if_exists: bool = False) -> bool:
         """
         Metodo para guardar dataframes de pandas en archivos parquet (requiere pyarrow)
-        :param path: ruta/archivo.parquet
-        :param df: pd.Dataframe
-        :param index: Añadir columna de indices, por defecto false
-        :return: True si ha creado el archivo, False si ya existe
+
+        :param path: Ruta completa del archivo. EXAMPLE: 'data/output/archivo.parquet'
+        :param df: DataFrame de pandas a guardar
+        :param index: Añadir columna de índices, por defecto False
+        :param replace_if_exists: Machacar el archivo si ya existe, por defecto False
+        :return: True si ha creado/reemplazado el archivo, False si ya existe y no se reemplaza
         """
         if not os.path.exists(path):
             print(f"---> dfToParquet: Guardando {path} ...")
             df.to_parquet(path, index=index)
-            print(f"---> dfToParquet: {path} guardado con exito. Su shape es: {df.shape}")
+            print(f"---> dfToParquet: {path} guardado con éxito. Su shape es: {df.shape}")
+            return True
         else:
-            print(f"---> dfToParquet: El archivo {path} ya existe")
+            if replace_if_exists:
+                print(f"---> dfToParquet: El archivo {path} ya existe. Reemplazando...")
+                os.remove(path)
+                df.to_parquet(path, index=index)
+                print(f"---> dfToParquet: {path} reemplazado con éxito. Su shape es: {df.shape}")
+                return True
+            else:
+                print(f"---> dfToParquet: El archivo {path} ya existe. No se reemplaza.")
+                return False
 
     @staticmethod
     def read_parquet_infering(file_path: str) -> pd.DataFrame:
