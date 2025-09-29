@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="constants_and_tools",
-    version="1.1.2",
+    version="2.2.1",
     author="Aletheia_corp",
     author_email="dsarabiatorres@gmail.com",
     description="Librería para desarrollo rápido y debug",
